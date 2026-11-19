@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#14424A">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>JOMNEY Vet Clinic Visits</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&family=Noto+Sans+Khmer:wght@400;600&display=swap">
+<style>
+/* Layout: full-screen map; top bar with rep button; scrollable day chips; bottom sheet (peek / half / full) with Clinics, Report and Plan tabs; floating buttons on the right */
+:root{
+  --brand:#14424A; --ink:#18212C; --muted:#5E6B7A; --line:#E3E7EC; --bg:#F5F8F8; --panel:#FFFFFF;
+  --accent:#C2571A; --link:#1F5FA8; --warn:#7A2E12; --warnbg:#FBEDE6; --tip:#5C4700; --tipbg:#FFF6D6;
+  --s0:#8A94A0; --s1:#1E6FD9; --s2:#1E7A3C; --s3:#C62828; --s4:#E08A00; --s5:#4A4458;
+  --body:"IBM Plex Sans","Noto Sans Khmer",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --display:"IBM Plex Sans Condensed","Noto Sans Khmer","Arial Narrow",system-ui,sans-serif;
+  --top:calc(52px + env(safe-area-inset-top,0px)); --chips:52px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;overflow:hidden}
+body{font-family:var(--body);color:var(--ink);background:var(--bg);font-size:15px}
+#map{position:fixed;inset:0;z-index:0;background:#E9EEF2}
+button,input,select,textarea{font:inherit;color:inherit}
+#top{position:fixed;left:0;right:0;top:0;z-index:600;height:var(--top);padding:env(safe-area-inset-top,0px) max(12px,env(safe-area-inset-right,0px)) 0 max(12px,env(safe-area-inset-left,0px));
+  background:var(--brand);color:#fff;display:flex;align-items:center;gap:10px;box-shadow:0 2px 6px rgba(0,0,0,.2)}
+#top h1{font-family:var(--display);font-size:18px;margin:0;white-space:nowrap;flex:1;overflow:hidden;text-overflow:ellipsis}
+#repBtn{flex:none;border:0;background:rgba(255,255,255,.16);color:#fff;border-radius:999px;padding:7px 12px;font-weight:600;font-size:13.5px;min-height:36px;max-width:55vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#chips{position:fixed;left:0;right:0;top:var(--top);z-index:590;height:var(--chips);display:flex;gap:8px;align-items:center;overflow-x:auto;scrollbar-width:none;
+  padding:0 max(12px,env(safe-area-inset-right,0px)) 0 max(12px,env(safe-area-inset-left,0px));background:rgba(255,255,255,.96);border-bottom:1px solid var(--line)}
+#chips::-webkit-scrollbar{display:none}
+.chip{flex:none;display:flex;align-items:center;gap:7px;border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font-size:14px;font-weight:600;min-height:38px;cursor:pointer}
+.chip small{font-weight:500;color:var(--muted);font-variant-numeric:tabular-nums}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+.chip[aria-pressed="true"] small{color:#C9D0D8}
+.chip .today{font-size:10.5px;font-weight:600;background:#FFD54F;color:#4A3B00;border-radius:4px;padding:1px 4px}
+.fabs{position:fixed;right:max(12px,env(safe-area-inset-right,0px));top:calc(var(--top) + var(--chips) + 12px);z-index:450;display:flex;flex-direction:column;gap:10px}
+.fab{width:46px;height:46px;border-radius:12px;border:0;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.25);display:grid;place-items:center;cursor:pointer}
+.fab svg{width:22px;height:22px;stroke:var(--brand);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.fab:active{transform:scale(.95)}
+#layersPanel{position:fixed;right:max(68px,calc(env(safe-area-inset-right,0px) + 68px));top:calc(var(--top) + var(--chips) + 12px);z-index:460;background:#fff;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.25);padding:6px 4px;min-width:230px}
+#layersPanel label{display:flex;align-items:center;gap:10px;padding:10px 12px;font-size:15px}
+#layersPanel input{width:20px;height:20px;accent-color:var(--brand)}
+#layersPanel hr{border:0;border-top:1px solid var(--line);margin:4px 8px}
+#layersPanel .lab{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);padding:6px 12px 0}
+#here{position:fixed;left:max(12px,env(safe-area-inset-left,0px));right:max(70px,calc(env(safe-area-inset-right,0px) + 70px));top:calc(var(--top) + var(--chips) + 12px);z-index:470;
+  background:#fff;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.25);padding:10px 12px;font-size:14px;line-height:1.5}
+#here .x{float:right;border:0;background:none;font-size:22px;line-height:1;padding:0 0 0 8px;color:var(--muted)}
+.lnk{border:0;background:none;padding:0;color:var(--link);font-weight:600;text-align:left;cursor:pointer}
+#sheet{position:fixed;left:0;right:0;bottom:0;z-index:500;background:var(--panel);border-radius:18px 18px 0 0;box-shadow:0 -4px 18px rgba(0,0,0,.18);
+  display:flex;flex-direction:column;height:var(--peek);transition:height .25s ease;--peek:calc(112px + env(safe-area-inset-bottom,0px))}
+#sheet.half{height:52%}
+#sheet.full{height:calc(100% - var(--top) - var(--chips) - 8px)}
+#grab{padding:8px 0 4px;display:grid;place-items:center;cursor:grab;touch-action:none}
+#grab span{width:42px;height:5px;border-radius:3px;background:#C9D0D8}
+#tabs{display:flex;gap:6px;padding:4px max(12px,env(safe-area-inset-left,0px)) 10px;border-bottom:1px solid var(--line);touch-action:none}
+#tabs button{flex:1;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 4px;font-weight:600;font-size:14px;min-height:44px}
+#tabs button[aria-selected="true"]{background:var(--brand);border-color:var(--brand);color:#fff}
+#body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+.bar2{display:flex;align-items:center;gap:8px;padding:10px 16px;flex-wrap:wrap}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:7px 11px;font-size:13px;font-weight:600;min-height:36px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.muted{color:var(--muted);font-size:13px}
+.row{display:flex;gap:12px;align-items:center;padding:10px max(16px,env(safe-area-inset-left,0px));border-bottom:1px solid var(--line);min-height:64px;width:100%;text-align:left;background:none;border-left:0;border-right:0;border-top:0;cursor:pointer}
+.row:active{background:var(--bg)}
+.row .info{flex:1;min-width:0}
+.row .t{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .m{font-size:13px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.num{flex:none;width:34px;height:34px;border-radius:50%;color:#fff;font-weight:600;font-size:14px;display:grid;place-items:center;font-variant-numeric:tabular-nums}
+.pr{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:999px;margin-right:4px;vertical-align:1px}
+.pr1{background:#FDE2E0;color:#9B1C1C} .pr2{background:#FFF0CC;color:#7A5200} .pr3{background:#EEF1F4;color:#4A5563}
+.st{flex:none;font-size:11.5px;font-weight:600;padding:3px 8px;border-radius:999px;color:#fff;white-space:nowrap;max-width:118px;overflow:hidden;text-overflow:ellipsis}
+.note{margin:10px 16px;font-size:13px;line-height:1.45;color:var(--muted);background:var(--bg);border-radius:10px;padding:9px 12px}
+.tip{color:var(--tip);background:var(--tipbg)}
+.wrn{color:var(--warn);background:var(--warnbg)}
+.empty{padding:24px 16px;color:var(--muted);text-align:center}
+.detail{padding:10px 16px}
+.dnav{display:flex;align-items:center;gap:8px}
+.back{border:0;background:none;color:var(--link);font-weight:600;font-size:15px;padding:6px 0;min-height:40px}
+.dnav .sp{flex:1}
+.dnav button.nb{border:1px solid var(--line);background:#fff;border-radius:10px;min-width:44px;min-height:40px;font-weight:600}
+.dnav button.nb:disabled{opacity:.35}
+.detail h2{font-size:21px;margin:6px 0 2px;line-height:1.3}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:7px 14px;margin:12px 0;font-size:15px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.mono{font-variant-numeric:tabular-nums}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:50px;border-radius:12px;font-weight:600;text-decoration:none;font-size:15px;border:0;cursor:pointer;padding:0 12px;text-align:center}
+.btn.primary{background:var(--brand);color:#fff}
+.btn.ghost{background:var(--bg);color:var(--ink);border:1px solid var(--line)}
+.btn.wide{grid-column:1/-1}
+.btn.tg{background:#229ED9;color:#fff}
+.form{margin:16px 0 4px;padding:14px;border:1.5px solid var(--line);border-radius:14px;background:#FBFCFC}
+.form h3{margin:0 0 10px;font-size:15px;font-family:var(--display);text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.opt{border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:10px 8px;font-size:14px;font-weight:600;min-height:46px;display:flex;align-items:center;gap:8px;text-align:left}
+.opt i{flex:none;width:12px;height:12px;border-radius:50%}
+.opt[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink);background:#F1F4F6}
+.fld{display:grid;gap:6px;margin-top:12px}
+.fld label{font-size:13px;color:var(--muted);font-weight:600}
+.fld input,.fld textarea{border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:16px;background:#fff;width:100%}
+.fld textarea{min-height:70px;resize:vertical}
+.inl{display:flex;gap:10px;align-items:end}
+.inl .fld{flex:1;min-width:0}
+.yn{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;height:46px}
+.yn button{flex:1;border:0;background:#fff;font-weight:600;min-width:56px}
+.yn button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.stepper{display:flex;align-items:center;border:1px solid var(--line);border-radius:10px;overflow:hidden;height:46px;background:#fff}
+.stepper button{border:0;background:var(--bg);width:46px;height:100%;font-size:20px;font-weight:600}
+.stepper input{border:0;text-align:center;width:100%;min-width:0;font-size:16px;font-variant-numeric:tabular-nums;padding:0}
+.saved{font-size:13px;color:var(--s2);font-weight:600;margin-top:10px;min-height:18px}
+table.sum{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+table.sum th,table.sum td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:right}
+table.sum th:first-child,table.sum td:first-child{text-align:left}
+table.sum th{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.sec{font-family:var(--display);font-size:14px;margin:16px 16px 6px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:middle}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:6px 16px}
+.kpi{background:var(--bg);border-radius:12px;padding:10px}
+.kpi b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.kpi span{font-size:12px;color:var(--muted)}
+.pbar{height:10px;border-radius:5px;background:var(--line);overflow:hidden;display:flex;margin:4px 16px 2px}
+.pbar i{display:block;height:100%}
+textarea.out{width:calc(100% - 32px);margin:8px 16px;min-height:140px;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.btns{display:grid;gap:10px;padding:8px 16px}
+/* map bits */
+.om{display:grid;place-items:center;border-radius:50%;color:#fff;font:600 12px var(--body);border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45);font-variant-numeric:tabular-nums}
+.om.hi{border-color:#FFD54F}
+.om.sel{box-shadow:0 0 0 4px rgba(255,213,79,.95),0 1px 3px rgba(0,0,0,.4)}
+.kh-label{background:transparent;border:0;box-shadow:none;font:600 11px var(--display);letter-spacing:.5px;text-transform:uppercase;color:#3A2F47;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff;pointer-events:none;white-space:nowrap}
+.kh-label::before{display:none}
+.me{width:18px;height:18px;border-radius:50%;background:#1A73E8;border:3px solid #fff;box-shadow:0 0 0 6px rgba(26,115,232,.25)}
+.leaflet-control-attribution{font-size:10px}
+.leaflet-bottom{bottom:calc(112px + env(safe-area-inset-bottom,0px))}
+.hide-kh .kh-label{display:none}
+/* rep picker */
+#picker{position:fixed;inset:0;z-index:800;background:rgba(10,20,25,.55);display:grid;place-items:end center;padding:0 0 env(safe-area-inset-bottom,0px)}
+#picker .card{background:#fff;width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:18px 16px 22px}
+#picker h2{margin:0 0 4px;font-family:var(--display);font-size:20px}
+#picker .who{display:grid;gap:10px;margin-top:14px}
+#picker .who button{display:flex;align-items:center;gap:12px;border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:12px 14px;font-weight:600;font-size:16px;min-height:56px;text-align:left}
+#picker .who button i{width:14px;height:14px;border-radius:50%}
+#picker .who button small{margin-left:auto;color:var(--muted);font-weight:500;font-size:13px}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(130px + env(safe-area-inset-bottom,0px));z-index:900;background:var(--ink);color:#fff;border-radius:10px;padding:10px 16px;font-size:14px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){#sheet{transition:none}}
+</style>
+</head>
+<body>
+<div id="map" role="region" aria-label="Map of vet clinics"></div>
+
+<header id="top">
+  <h1>Vet Clinic Visits</h1>
+  <button id="repBtn" aria-label="Change who is using this phone"></button>
+</header>
+<nav id="chips" aria-label="Visit day"></nav>
+
+<div class="fabs">
+  <button class="fab" id="btnLayers" aria-label="Map layers" aria-expanded="false">
+    <svg viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5-10-5z"/><path d="m2 13 10 5 10-5"/></svg></button>
+  <button class="fab" id="btnLocate" aria-label="Where am I? Show nearest clinics">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
+  <button class="fab" id="btnFit" aria-label="Show all clinics of this day">
+    <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+</div>
+
+<div id="layersPanel" hidden>
+  <div class="lab">Base map</div>
+  <label><input type="radio" name="base" id="b-street" value="street" checked> Street map</label>
+  <label><input type="radio" name="base" id="b-clean" value="clean"> Clean map</label>
+  <label><input type="radio" name="base" id="b-sat" value="sat"> Satellite</label>
+  <hr>
+  <div class="lab">Show</div>
+  <label><input type="checkbox" id="l-route" checked> Route line</label>
+  <label><input type="checkbox" id="l-other" checked> Other clinics (grey dots)</label>
+  <label><input type="checkbox" id="l-kh" checked> Khan borders</label>
+</div>
+
+<div id="here" hidden></div>
+<div id="toast" hidden></div>
+
+<section id="sheet" aria-label="Clinic list">
+  <div id="grab" aria-hidden="true"><span></span></div>
+  <div id="tabs" role="tablist">
+    <button role="tab" id="t-list" data-tab="list" aria-selected="true">Clinics</button>
+    <button role="tab" id="t-report" data-tab="report" aria-selected="false">Report</button>
+    <button role="tab" id="t-plan" data-tab="plan" aria-selected="false">Plan</button>
+  </div>
+  <div id="body"></div>
+</section>
+
+<div id="picker" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="pk-h">
+    <h2 id="pk-h">Who is using this phone?</h2>
+    <div class="muted">Shows your own clinics and route. You can change it later from the top bar.</div>
+    <div class="who" id="pk-list"></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const CLINICS=[{"n":1,"pri":1,"name":"VSL Veterinary Clinic","zone":"Central (BKK / Toul Tom Poung / Daun Penh)","rep":0,"date":"2026-11-19","ord":1,"phone":"+855 23 986 640","tel":"+85523986640","addr":"33 Street 334, BKK1","status":"To visit","note":"","rating":4.6,"reviews":293,"pid":"ChIJaVqsSiRRCTERvXsS5rXhYWc","lat":11.5500156,"lng":104.9243039,"hours":"Mon–Sat 9:00–19:00 · Sun 9:00–17:00","row":5,"sord":2},{"n":2,"pri":1,"name":"Sunny Animal Hospital","zone":"Central (BKK / Toul Tom Poung / Daun Penh)","rep":0,"date":"2026-11-19","ord":2,"phone":"+855 10 461 212","tel":"+85510461212","addr":"32B St 368, BKK3","status":"To visit","note":"","rating":4.8,"reviews":231,"pid":"ChIJlafX4o5RCTERJWYaZk0qxqU","lat":11.5471302,"lng":104.9172263,"hours":"Daily 9:00–18:00","row":6,"sord":4},{"n":3,"pri":1,"name":"TM Vet Clinic (Navetco Pet Hospital)","zone":"Central (BKK / Toul Tom Poung / Daun Penh)","rep":0,"date":"2026-11-19","ord":3,"phone":"+855 96 729 0999","tel":"+855967290999","addr":"St 328","status":"To visit","note":"Also sells food & accessories","rating":4.3,"reviews":158,"pid":"ChIJSxnPoFtRCTERPX8m0XT5T1I","lat":11.5504045,"lng":104.9114515,"hours":"Daily 8:00–12:00, 13:30–18:30 (lunch break)","row":7,"sord":5},{"n":4,"pri":1,"name":"Chamnan Veterinary Clinic","zone":"Central (BKK / Toul Tom Poung / Daun Penh)","rep":0,"date":"2026-11-19","ord":4,"phone":"+855 89 469 591","tel":"+85589469591","addr":"11A Street 390","status":"To visit","note":"","rating":4.5,"reviews":143,"pid":"ChIJw8ud9edQCTERi3IPE6p-Dxc","lat":11.5456199,"lng":104.9202326,"hours":"Mon–Sat 8:00–18:00 · Sun closed","row":8,"sord":3},{"n":5,"pri":1,"name":"Japan Animal Hospital","zone":"Central (BKK / Toul Tom Poung / Daun Penh)","rep":0,"date":"2026-11-19","ord":5,"phone":"+855 10 303 088","tel":"+85510303088","addr":"M43 Preah Trasak Paem St (63)","status":"To visit","note":"","rating":4.5,"reviews":116,"pid":"ChIJdT8qb3BRCTER9BYRmcvhjds","lat":11.5411334,"lng":104.9251605,"hours":"Daily 9:00–21:00","row":9,"sord":1},{"n":6,"pri":1,"name":"Samaki Veterinary Clinic","zone":"North (Toul Kork / Russey Keo)","rep":1,"date":"2026-11-19","ord":1,"phone":"+855 16 467 971","tel":"+85516467971","addr":"20 St 323 corner 596","status":"To visit","note":"","rating":4.2,"reviews":95,"pid":"ChIJN7TDQsRZCTERlohnpmhY2go","lat":11.5758056,"lng":104.8885724,"hours":"Mon–Sat 8:30–18:30 · Sun 8:00–17:00","row":10,"sord":3},{"n":7,"pri":1,"name":"Cambovet Veterinary Clinic","zone":"North (Toul Kork / Russey Keo)","rep":1,"date":"2026-11-19","ord":2,"phone":"+855 92 280 998","tel":"+85592280998","addr":"22A Street 594","status":"To visit","note":"Same phone as KNP Vet (likely branch)","rating":4.8,"reviews":91,"pid":"ChIJSVIvBwVRCTERQtUViH142lo","lat":11.5789353,"lng":104.8888219,"hours":"Mon–Fri 8:00–20:00 · Sat–Sun 8:00–18:00","row":11,"sord":2},{"n":8,"pri":2,"name":"I-Vet Clinic (អាយវេត)","zone":"North (Toul Kork / Russey Keo)","rep":1,"date":"2026-11-19","ord":3,"phone":"+855 96 223 3119","tel":"+855962233119","addr":"358 St 590","status":"To visit","note":"In our outlet list, never ordered","rating":4.8,"reviews":27,"pid":"ChIJq1b1GgBTCTERO1QjF1bEOfE","lat":11.5901449,"lng":104.9000536,"hours":"Daily 8:00–20:00","row":12,"sord":1},{"n":9,"pri":2,"name":"Samnang Meanchey Animal Clinic 01","zone":"West (Sen Sok / Teuk Thla)","rep":1,"date":"2026-11-19","ord":4,"phone":"+855 92 879 769","tel":"+85592879769","addr":"St 2011 (Oknha Try Heng)","status":"To visit","note":"","rating":4.1,"reviews":35,"pid":"ChIJqaqajdtRCTERPLzZSkLkhek","lat":11.5628013,"lng":104.8531912,"hours":"Hours not on Google","row":13,"sord":4},{"n":10,"pri":2,"name":"Paws Veterinary Clinic","zone":"West (Sen Sok / Teuk Thla)","rep":1,"date":"2026-11-19","ord":5,"phone":"+855 85 250 445","tel":"+85585250445","addr":"Street 2011","status":"To visit","note":"","rating":4.8,"reviews":34,"pid":"ChIJz0jAwhVPCTERyFHvEymiq4Y","lat":11.5820291,"lng":104.828216,"hours":"Daily 8:00–17:30","row":14,"sord":5},{"n":11,"pri":1,"name":"Animal-Mama Veterinary Hospital","zone":"South (Mean Chey / Chak Angre)","rep":2,"date":"2026-11-19","ord":1,"phone":"+855 10 500 999","tel":"+85510500999","addr":"House #15 Street 500","status":"To visit","note":"","rating":4.7,"reviews":818,"pid":"ChIJY65w7cJQCTERfVhVmq5-nhk","lat":11.5300351,"lng":104.915919,"hours":"Daily 9:00–19:00 (Thu to 18:00)","row":15,"sord":3},{"n":12,"pri":1,"name":"Phnom Penh Animal Welfare Society (PPAWS)","zone":"South (Mean Chey / Chak Angre)","rep":2,"date":"2026-11-19","ord":2,"phone":"+855 78 611 289","tel":"+85578611289","addr":"189 St 37BT","status":"To visit","note":"","rating":4.5,"reviews":210,"pid":"ChIJs5guwu5QCTERYx51VB_PIjc","lat":11.5291072,"lng":104.9082867,"hours":"Daily 8:00–12:00, 14:00–18:00 (lunch break)","row":16,"sord":4},{"n":13,"pri":2,"name":"Vet Care All Animal Veterinary Clinic","zone":"South (Mean Chey / Chak Angre)","rep":2,"date":"2026-11-19","ord":3,"phone":"","tel":"","addr":"#405 St 61BT","status":"To visit","note":"No phone on Google – walk in, cannot pre-book","rating":4.6,"reviews":30,"pid":"ChIJDaTeb79RCTERvh4Ti29kHqk","lat":11.524269,"lng":104.9145621,"hours":"Mon–Sat 7:00–17:00 · Sun closed","row":17,"sord":2},{"n":14,"pri":2,"name":"CamPaws Animal Clinic","zone":"South (Mean Chey / Chak Angre)","rep":2,"date":"2026-11-19","ord":4,"phone":"+855 96 552 5550","tel":"+855965525550","addr":"House #89 Road 7","status":"To visit","note":"Has pet store","rating":5,"reviews":26,"pid":"ChIJW3r0OGxbCTERavu4pzFbu00","lat":11.4677375,"lng":104.878474,"hours":"Daily 7:00–19:00","row":18,"sord":1},{"n":15,"pri":1,"name":"D&C Vet Clinic","zone":"South-West (Chom Chao / Por Senchey)","rep":2,"date":"2026-11-19","ord":5,"phone":"+855 11 818 666","tel":"+85511818666","addr":"Chom Chao 3","status":"To visit","note":"Open 24h","rating":4.8,"reviews":91,"pid":"ChIJw3muIgBPCTERmNbSXkUWRqY","lat":11.5322082,"lng":104.8326843,"hours":"Open 24 hours","row":19,"sord":5},{"n":16,"pri":1,"name":"Agrovet Clinic","zone":"Central (BKK / Toul Tom Poung / Daun Penh)","rep":0,"date":"2026-11-20","ord":1,"phone":"+855 23 216 323","tel":"+85523216323","addr":"40 St 111","status":"To visit","note":"","rating":4.2,"reviews":87,"pid":"ChIJ3aSezT1RCTERlA_9-rl_lTA","lat":11.5590063,"lng":104.9182898,"hours":"Mon–Fri 9:00–12:00, 15:00–19:00 · Sat 9:00–12:00 · Sun closed","row":20,"sord":3},{"n":17,"pri":2,"name":"Animal Doctors International Hospital","zone":"Central (BKK / Toul Tom Poung / Daun Penh)","rep":0,"date":"2026-11-20","ord":2,"phone":"+855 23 238 239","tel":"+85523238239","addr":"42 Street 322, BKK1","status":"To visit","note":"Has pet store","rating":4.5,"reviews":71,"pid":"ChIJob2z6npRCTERIy-68FFiuHI","lat":11.5503829,"lng":104.922713,"hours":"Daily 9:00–19:00 · Mon 23–Wed 25 Nov: 9:00–12:00 only","row":21,"sord":1},{"n":18,"pri":2,"name":"Pipheap Sat (ពិភពសត្វ)","zone":"Central (BKK / Toul Tom Poung / Daun Penh)","rep":0,"date":"2026-11-20","ord":3,"phone":"+855 12 828 962","tel":"+85512828962","addr":"No. 339 Blvd 271","status":"To visit","note":"","rating":3,"reviews":63,"pid":"ChIJBYwtNKdRCTEREt_acpm3hto","lat":11.5612509,"lng":104.8904038,"hours":"Daily 7:00–19:00","row":22,"sord":4},{"n":19,"pri":2,"name":"Sokhomalpheap Animal Clinic","zone":"Central (BKK / Toul Tom Poung / Daun Penh)","rep":0,"date":"2026-11-20","ord":4,"phone":"+855 12 829 373","tel":"+85512829373","addr":"64 St 174","status":"To visit","note":"","rating":4.1,"reviews":31,"pid":"ChIJnUF_mThRCTERqncZFzfOF6c","lat":11.5648581,"lng":104.9231715,"hours":"Mon–Sat 8:00–19:00 · Sun closed","row":23,"sord":2},{"n":20,"pri":3,"name":"Dr. Sum Veterinary Clinic","zone":"Central (BKK / Toul Tom Poung / Daun Penh)","rep":0,"date":"2026-11-20","ord":5,"phone":"+855 15 954 321","tel":"+85515954321","addr":"282B1 St 371","status":"To visit","note":"Open 24h","rating":4.4,"reviews":18,"pid":"ChIJVSIwGQBRCTERvEuItGoE_mk","lat":11.5486763,"lng":104.8859488,"hours":"Open 24 hours","row":24,"sord":5},{"n":21,"pri":3,"name":"PBox Vet Clinic & Grooming Center","zone":"North (Toul Kork / Russey Keo)","rep":1,"date":"2026-11-20","ord":1,"phone":"+855 98 355 977","tel":"+85598355977","addr":"Toul Kork area","status":"To visit","note":"Grooming too","rating":5,"reviews":16,"pid":"ChIJiQ97BABRCTERi2ef5by06Tc","lat":11.5775061,"lng":104.9027394,"hours":"Daily 8:30–18:30","row":25,"sord":3},{"n":22,"pri":3,"name":"Dogtor VET Services (ដុកទ័រ)","zone":"North (Toul Kork / Russey Keo)","rep":1,"date":"2026-11-20","ord":2,"phone":"+855 16 926 232","tel":"+85516926232","addr":"Street 99","status":"To visit","note":"In our outlet list, never ordered","rating":5,"reviews":13,"pid":"ChIJDShmdABTCTERTHoDZmr6cLM","lat":11.6003804,"lng":104.9125135,"hours":"Daily 8:30–19:00","row":26,"sord":4},{"n":23,"pri":3,"name":"Sokhum (សុខុម)","zone":"North (Toul Kork / Russey Keo)","rep":1,"date":"2026-11-20","ord":3,"phone":"","tel":"","addr":"101 St 566","status":"To visit","note":"No phone on Google – walk in, cannot pre-book","rating":5,"reviews":11,"pid":"ChIJge9gGgBRCTER8HsKiuFpKnY","lat":11.5769281,"lng":104.8984483,"hours":"Hours not on Google","row":27,"sord":2},{"n":24,"pri":3,"name":"V-VET (ពេទ្យសត្វ)","zone":"North (Toul Kork / Russey Keo)","rep":1,"date":"2026-11-20","ord":4,"phone":"","tel":"","addr":"3a Street 93","status":"To visit","note":"No phone on Google – walk in, cannot pre-book","rating":5,"reviews":6,"pid":"ChIJrX7-QgBTCTERIxkisb47vTs","lat":11.6025844,"lng":104.9134184,"hours":"Open 24 hours","row":28,"sord":5},{"n":25,"pri":3,"name":"Central Vet Clinic","zone":"North (Toul Kork / Russey Keo)","rep":1,"date":"2026-11-20","ord":5,"phone":"+855 96 454 2951","tel":"+855964542951","addr":"HVXP+4HJ (Russey Keo)","status":"To visit","note":"","rating":3.7,"reviews":3,"pid":"ChIJa4E9NQBTCTERmqzOVjn1Bl4","lat":11.5978428,"lng":104.8863801,"hours":"Daily 8:00–18:00","row":29,"sord":1},{"n":26,"pri":3,"name":"Yu Nara Metta Vet (ពេទ្យសត្វ យូ ណារ៉ះមេត្តា)","zone":"Central (BKK / Toul Tom Poung / Daun Penh)","rep":2,"date":"2026-11-20","ord":1,"phone":"+855 93 627 143","tel":"+85593627143","addr":"6a Street 372","status":"To visit","note":"","rating":3.1,"reviews":7,"pid":"ChIJZc5ueQBRCTERjm7rbafE4Wc","lat":11.5520182,"lng":104.8985544,"hours":"Hours not on Google","row":30,"sord":3},{"n":27,"pri":3,"name":"Dr. Leap Veterinary Clinic","zone":"South (Mean Chey / Chak Angre)","rep":2,"date":"2026-11-20","ord":2,"phone":"+855 11 200 596","tel":"+85511200596","addr":"Toul Pongro","status":"To visit","note":"Open 24h","rating":4.7,"reviews":12,"pid":"ChIJSTvTCwdRCTERfv8ou4V8ho8","lat":11.5198125,"lng":104.8839375,"hours":"Open 24 hours","row":31,"sord":2},{"n":28,"pri":3,"name":"FVM Veterinary Teaching Hospital, RUA","zone":"South (Mean Chey / Chak Angre)","rep":2,"date":"2026-11-20","ord":3,"phone":"+855 17 423 920","tel":"+85517423920","addr":"Royal University of Agriculture","status":"To visit","note":"University hospital: good for vet advisor contacts","rating":5,"reviews":8,"pid":"ChIJcZpHWgBRCTERm6POrrMFqHA","lat":11.5088227,"lng":104.8979664,"hours":"Open 24 hours","row":32,"sord":1},{"n":29,"pri":2,"name":"Vet Clinic Poupone","zone":"East (Chbar Ampov)","rep":2,"date":"2026-11-20","ord":4,"phone":"+855 12 543 211","tel":"+85512543211","addr":"NR1, 6 km after Monivong Bridge","status":"To visit","note":"","rating":4.8,"reviews":25,"pid":"ChIJW3ezSf5XCTER-GZ6QwyfBuQ","lat":11.5326117,"lng":104.979876,"hours":"Mon–Sat 9:00–24:00 · Sun closed","row":33,"sord":5},{"n":30,"pri":3,"name":"EUROVET Phnom Penh NR1","zone":"East (Chbar Ampov)","rep":2,"date":"2026-11-20","ord":5,"phone":"+855 69 267 879","tel":"+85569267879","addr":"NR1, 6 km after Monivong Bridge","status":"To visit","note":"","rating":4.4,"reviews":16,"pid":"ChIJcQU11GVRCTERGR3jLQeS1Zg","lat":11.5357996,"lng":104.9732685,"hours":"Mon–Sat 9:00–12:00, 15:00–19:00 · Sun closed","row":34,"sord":4},{"n":31,"pri":3,"name":"PAW Global Veterinary","zone":"Central (BKK / Toul Tom Poung / Daun Penh)","rep":0,"date":"2026-11-21","ord":1,"phone":"","tel":"","addr":"No 60 Street 608","status":"To visit","note":"No phone on Google – walk in, cannot pre-book","rating":5,"reviews":2,"pid":"ChIJAf-sZQBRCTERMJwsxQbfp8Y","lat":11.5715966,"lng":104.8915839,"hours":"Mon–Sat 8:00–20:00 · Sun closed","row":35,"sord":1},{"n":32,"pri":3,"name":"GOOD VET","zone":"Central (BKK / Toul Tom Poung / Daun Penh)","rep":0,"date":"2026-11-21","ord":2,"phone":"+855 12 279 192","tel":"+85512279192","addr":"Blvd Mao Tse Toung","status":"To visit","note":"In our outlet list, never ordered","rating":5,"reviews":1,"pid":"ChIJvSYsEhlRCTERmf6pf3R6I6o","lat":11.5520318,"lng":104.9020242,"hours":"Daily 7:00–19:00","row":36,"sord":3},{"n":33,"pri":3,"name":"Vet Nut Sophorn (វេជ្ជ នុត សោភ័ណ)","zone":"Central (BKK / Toul Tom Poung / Daun Penh)","rep":0,"date":"2026-11-21","ord":3,"phone":"+855 12 824 991","tel":"+85512824991","addr":"02 Street 371","status":"To visit","note":"","rating":5,"reviews":1,"pid":"ChIJfzYvpa5RCTERxE3AbF4Wq2Y","lat":11.5512727,"lng":104.8854786,"hours":"Hours not on Google","row":37,"sord":2},{"n":34,"pri":3,"name":"KNP Veterinary Clinic","zone":"North (Toul Kork / Russey Keo)","rep":1,"date":"2026-11-21","ord":1,"phone":"+855 92 280 998","tel":"+85592280998","addr":"K-98 St 07, Borey Toul Sangke","status":"To visit","note":"Same phone as Cambovet; open Sat–Sun only → visit on Saturday only","rating":5,"reviews":1,"pid":"ChIJb2m3U1hTCTERmba1E2fY3Qk","lat":11.6034857,"lng":104.9059414,"hours":"Sat–Sun 8:00–19:00 only","row":38,"sord":2},{"n":35,"pri":3,"name":"Vet Rey (ពេទ្យសត្វ វ៉េត រ៉េយ)","zone":"North (Toul Kork / Russey Keo)","rep":1,"date":"2026-11-21","ord":2,"phone":"+855 93 888 543","tel":"+85593888543","addr":"L2 Street 200R","status":"To visit","note":"Open 24h","rating":5,"reviews":2,"pid":"ChIJHVIAK_1TCTER9xUDJSf3GU0","lat":11.6138789,"lng":104.904036,"hours":"Hours not on Google","row":39,"sord":1},{"n":36,"pri":3,"name":"Dr. Sokim Veterinary Clinic","zone":"West (Sen Sok / Teuk Thla)","rep":1,"date":"2026-11-21","ord":3,"phone":"","tel":"","addr":"Wat Samrong Andet road","status":"To visit","note":"No phone on Google – walk in, cannot pre-book","rating":5,"reviews":2,"pid":"ChIJ6yItQwBRCTERaJ4fSYyuGT8","lat":11.5847583,"lng":104.8641557,"hours":"Open 24 hours","row":40,"sord":3},{"n":37,"pri":3,"name":"Phnom Penh Animal Clinic II","zone":"South (Mean Chey / Chak Angre)","rep":2,"date":"2026-11-21","ord":1,"phone":"+855 77 773 412","tel":"+85577773412","addr":"#361 Monireth Blvd (217)","status":"To visit","note":"Supplier/food too","rating":2.8,"reviews":5,"pid":"ChIJIaire1lQCTERElyH7nH5buk","lat":11.5307673,"lng":104.8868349,"hours":"Daily 6:30–20:30","row":41,"sord":1},{"n":38,"pri":3,"name":"Borita's Vet Clinic","zone":"South (Mean Chey / Chak Angre)","rep":2,"date":"2026-11-21","ord":2,"phone":"+855 81 759 893","tel":"+85581759893","addr":"1011 St 1, Monireth (217)","status":"To visit","note":"","rating":5,"reviews":1,"pid":"ChIJu-_aZABRCTERBWKAcMcvyIc","lat":11.5087053,"lng":104.8875673,"hours":"Hours not on Google","row":42,"sord":2},{"n":39,"pri":3,"name":"B O Vet Veterinary Animal Clinic","zone":"South-West (Chom Chao / Por Senchey)","rep":2,"date":"2026-11-21","ord":3,"phone":"+855 10 664 389","tel":"+85510664389","addr":"Borey Santepheap 2","status":"To visit","note":"","rating":4,"reviews":5,"pid":"ChIJgzbK9jBbCTERp9JcaLVVcHI","lat":11.4997015,"lng":104.847638,"hours":"Daily 8:00–20:00","row":43,"sord":3}];
+const KHANS={"7 Makara":{"r":[[11.56727,104.9185],[11.57145,104.91583],[11.56785,104.90668],[11.56501,104.90709],[11.55775,104.90813],[11.5559,104.91042],[11.5557,104.91378],[11.55579,104.91633],[11.55585,104.91973],[11.55881,104.92009],[11.56643,104.91885],[11.56727,104.9185]],"c":[11.5635,104.91345]},"Boeng Keng Kang":{"r":[[11.55775,104.90813],[11.55582,104.90631],[11.55286,104.90326],[11.55075,104.90093],[11.54835,104.89842],[11.54597,104.89921],[11.5446,104.90084],[11.54376,104.90359],[11.54311,104.90648],[11.5412,104.90862],[11.54368,104.9102],[11.54441,104.91162],[11.54411,104.91395],[11.54421,104.92232],[11.54571,104.92801],[11.54913,104.92833],[11.55289,104.92872],[11.55556,104.92841],[11.55687,104.92865],[11.55605,104.92457],[11.55597,104.92239],[11.5559,104.92046],[11.55576,104.91819],[11.55579,104.91577],[11.55569,104.91127],[11.55698,104.90905],[11.55775,104.90813]],"c":[11.54974,104.91453]},"Chamkar Mon":{"r":[[11.55611,104.92843],[11.55691,104.92918],[11.55705,104.93159],[11.55673,104.93401],[11.55698,104.93566],[11.55704,104.93823],[11.54626,104.94397],[11.54306,104.93961],[11.54121,104.93523],[11.53824,104.93184],[11.53418,104.93179],[11.53132,104.93282],[11.52954,104.92874],[11.5283,104.92578],[11.52739,104.92357],[11.5267,104.9218],[11.52673,104.92024],[11.52718,104.91733],[11.52923,104.91497],[11.53249,104.91329],[11.5347,104.9121],[11.53895,104.90985],[11.5412,104.90862],[11.54368,104.9102],[11.54441,104.91162],[11.54411,104.91395],[11.54421,104.92232],[11.54571,104.92801],[11.54913,104.92833],[11.55289,104.92872],[11.55556,104.92841],[11.55611,104.92843]],"c":[11.54285,104.92888]},"Chbar Ampov":{"r":[[11.55771,104.95251],[11.54382,104.94098],[11.54229,104.93833],[11.53991,104.93327],[11.53618,104.93144],[11.5323,104.93241],[11.52636,104.93488],[11.51721,104.93802],[11.50207,104.94291],[11.49386,104.94677],[11.49101,104.94824],[11.48606,104.95073],[11.48109,104.95323],[11.47417,104.95739],[11.46879,104.96062],[11.46562,104.96415],[11.46316,104.96997],[11.46268,104.97358],[11.46239,104.97563],[11.46259,104.97828],[11.46299,104.98752],[11.46465,104.99415],[11.46493,104.99712],[11.46512,104.99943],[11.46587,105.00362],[11.46603,105.01015],[11.4659,105.01706],[11.46572,105.02398],[11.46542,105.02882],[11.4692,105.02881],[11.47511,105.0344],[11.47961,105.04228],[11.4809,105.04743],[11.4824,105.05038],[11.48353,105.02931],[11.49123,105.02903],[11.49761,105.02816],[11.5005,105.02839],[11.50356,105.02817],[11.50784,105.0275],[11.51567,105.02628],[11.52213,105.02896],[11.52794,105.03504],[11.53539,105.03911],[11.53904,105.04178],[11.54154,105.03268],[11.54255,105.02686],[11.54352,105.01952],[11.54365,105.01726],[11.54378,105.00954],[11.54368,105.00477],[11.54369,105.00209],[11.54324,104.99861],[11.54308,104.9957],[11.54334,104.99244],[11.5446,104.98519],[11.54609,104.97602],[11.54922,104.96739],[11.55268,104.96201],[11.55469,104.95766],[11.55731,104.95313],[11.55771,104.95251]],"c":[11.50813,104.98643]},"Chroy Changvar":{"r":[[11.71134,104.96003],[11.71506,104.95901],[11.71794,104.95611],[11.7221,104.95214],[11.72593,104.94922],[11.73195,104.94773],[11.73447,104.94548],[11.73579,104.93983],[11.73599,104.93195],[11.73609,104.92428],[11.7364,104.92021],[11.7322,104.91756],[11.72573,104.9176],[11.71779,104.91655],[11.71227,104.91256],[11.70845,104.91087],[11.70116,104.90941],[11.69689,104.90682],[11.69145,104.90044],[11.68699,104.89853],[11.68475,104.89844],[11.68308,104.8995],[11.67252,104.89841],[11.67252,104.89384],[11.67233,104.88523],[11.67265,104.87818],[11.67265,104.8713],[11.67275,104.86795],[11.67264,104.86267],[11.66756,104.86175],[11.66117,104.86622],[11.65739,104.86924],[11.65378,104.87161],[11.64903,104.87523],[11.64488,104.87898],[11.64142,104.88562],[11.64022,104.88878],[11.63809,104.89443],[11.63671,104.89777],[11.63408,104.90332],[11.63187,104.90658],[11.62869,104.90997],[11.62392,104.9143],[11.61828,104.91822],[11.61473,104.91958],[11.61099,104.92029],[11.60794,104.92068],[11.60603,104.92076],[11.60243,104.92113],[11.59731,104.92102],[11.59335,104.92117],[11.58889,104.92119],[11.58774,104.9214],[11.5846,104.92342],[11.5804,104.92622],[11.57746,104.92829],[11.5753,104.92941],[11.57305,104.93131],[11.57136,104.93202],[11.56813,104.9337],[11.56622,104.93542],[11.5639,104.93874],[11.56201,104.94174],[11.56182,104.94319],[11.56197,104.94662],[11.56501,104.94587],[11.5807,104.94471],[11.58894,104.94342],[11.59603,104.94105],[11.59849,104.94019],[11.60396,104.93816],[11.6102,104.93608],[11.61486,104.93461],[11.61935,104.93325],[11.62235,104.93228],[11.62754,104.93341],[11.63392,104.93459],[11.64235,104.93756],[11.64816,104.94176],[11.65434,104.94594],[11.66588,104.95069],[11.67115,104.95286],[11.67771,104.95635],[11.67865,104.95878],[11.68282,104.95984],[11.68986,104.96216],[11.69931,104.96431],[11.70758,104.96691],[11.71099,104.96837],[11.7111,104.96344],[11.71134,104.96003],[11.71134,104.96003]],"c":[11.6657,104.92345]},"Dangkao":{"r":[[11.50282,104.91374],[11.48236,104.91362],[11.48123,104.92086],[11.47905,104.92037],[11.47643,104.91994],[11.46658,104.91822],[11.46032,104.92007],[11.45232,104.92257],[11.44709,104.92297],[11.4288,104.92259],[11.42907,104.92129],[11.429,104.91849],[11.43003,104.9167],[11.43026,104.91352],[11.43239,104.91309],[11.43435,104.9098],[11.43573,104.90569],[11.43499,104.90145],[11.43542,104.89812],[11.4345,104.89474],[11.43179,104.8911],[11.4305,104.88725],[11.43426,104.88517],[11.43589,104.88277],[11.43621,104.88066],[11.43354,104.87915],[11.42849,104.87654],[11.42443,104.87454],[11.42249,104.87344],[11.42385,104.87049],[11.42493,104.86763],[11.42574,104.86584],[11.42614,104.8639],[11.42451,104.86222],[11.42416,104.86018],[11.42368,104.85852],[11.42438,104.85623],[11.42676,104.85496],[11.42847,104.85387],[11.42937,104.85263],[11.4304,104.8487],[11.43085,104.83174],[11.43212,104.82996],[11.43606,104.82748],[11.43908,104.82679],[11.44066,104.82472],[11.44277,104.82365],[11.44407,104.82214],[11.44278,104.81959],[11.44076,104.81802],[11.43954,104.81617],[11.43883,104.81512],[11.43767,104.81709],[11.43678,104.81925],[11.4348,104.81904],[11.4324,104.81799],[11.43081,104.81602],[11.43073,104.8138],[11.43027,104.81196],[11.43021,104.80972],[11.4311,104.80699],[11.43159,104.80484],[11.43311,104.80276],[11.434,104.80146],[11.43632,104.80099],[11.43827,104.79947],[11.43976,104.79824],[11.441,104.79745],[11.44252,104.79834],[11.44406,104.79936],[11.44514,104.79859],[11.44455,104.7964],[11.4435,104.79491],[11.44349,104.79316],[11.44539,104.79337],[11.44718,104.79323],[11.44818,104.79194],[11.45149,104.7942],[11.45603,104.79696],[11.45981,104.79872],[11.46025,104.80089],[11.45997,104.80354],[11.46053,104.80657],[11.46007,104.80918],[11.46047,104.81031],[11.46308,104.81147],[11.46638,104.81275],[11.4703,104.81365],[11.47356,104.81391],[11.47591,104.81424],[11.47886,104.81468],[11.48305,104.81572],[11.4872,104.81666],[11.48999,104.81759],[11.49109,104.82011],[11.49355,104.81906],[11.49541,104.81771],[11.49736,104.81796],[11.50079,104.81851],[11.50015,104.82088],[11.50031,104.82446],[11.50056,104.82917],[11.50046,104.83215],[11.50027,104.83517],[11.50028,104.83653],[11.49964,104.83843],[11.50134,104.83844],[11.50373,104.83785],[11.50601,104.84009],[11.50636,104.84533],[11.50577,104.85339],[11.50666,104.86069],[11.5101,104.86558],[11.51142,104.87256],[11.5146,104.87705],[11.51693,104.87826],[11.5193,104.87747],[11.52188,104.87548],[11.52198,104.88136],[11.52223,104.88704],[11.52232,104.89028],[11.52302,104.8967],[11.52249,104.89861],[11.52105,104.90406],[11.51958,104.91005],[11.51899,104.91332],[11.5123,104.91357],[11.50892,104.91364],[11.50282,104.91374],[11.50282,104.91374]],"c":[11.46926,104.86611]},"Doun Penh":{"r":[[11.58889,104.92119],[11.58873,104.91941],[11.58847,104.91721],[11.58821,104.91566],[11.58696,104.91441],[11.58451,104.91136],[11.58334,104.90783],[11.58071,104.90598],[11.57792,104.90477],[11.575,104.90442],[11.57251,104.90441],[11.57054,104.90629],[11.57158,104.91843],[11.56643,104.91885],[11.55881,104.92009],[11.55591,104.92113],[11.55596,104.92331],[11.55631,104.92614],[11.55691,104.92918],[11.55705,104.93159],[11.55673,104.93401],[11.55698,104.93566],[11.55704,104.93823],[11.55906,104.95048],[11.56003,104.94861],[11.56148,104.94693],[11.56192,104.9447],[11.562,104.94251],[11.56318,104.93992],[11.56482,104.9371],[11.56754,104.93429],[11.56968,104.93289],[11.57249,104.93148],[11.57429,104.93033],[11.57686,104.92845],[11.57856,104.92742],[11.58243,104.92484],[11.58651,104.92224],[11.58832,104.92118],[11.58889,104.92119]],"c":[11.57074,104.92348]},"Kamboul":{"r":[[11.55253,104.7832],[11.55057,104.78331],[11.54789,104.78579],[11.54877,104.79353],[11.54809,104.79569],[11.5433,104.79558],[11.53891,104.79701],[11.53572,104.79843],[11.53225,104.80024],[11.53114,104.80046],[11.5303,104.79683],[11.52573,104.7963],[11.51866,104.79478],[11.51893,104.79837],[11.52006,104.80174],[11.52025,104.80635],[11.51945,104.81262],[11.51888,104.81702],[11.51834,104.82119],[11.51437,104.82057],[11.51064,104.82017],[11.50918,104.81985],[11.50474,104.81928],[11.50208,104.81864],[11.50079,104.81851],[11.49736,104.81796],[11.49541,104.81771],[11.49355,104.81906],[11.49109,104.82011],[11.48999,104.81759],[11.4872,104.81666],[11.48305,104.81572],[11.47886,104.81468],[11.47591,104.81424],[11.47356,104.81391],[11.4703,104.81365],[11.46638,104.81275],[11.46308,104.81147],[11.46047,104.81031],[11.46007,104.80918],[11.46053,104.80657],[11.45997,104.80354],[11.46025,104.80089],[11.45981,104.79872],[11.45603,104.79696],[11.45149,104.7942],[11.44818,104.79194],[11.44673,104.79103],[11.4458,104.78988],[11.44532,104.78845],[11.44617,104.78722],[11.44687,104.78576],[11.44725,104.78437],[11.44794,104.78322],[11.44925,104.78231],[11.45121,104.78287],[11.45297,104.78458],[11.45504,104.78486],[11.45609,104.78354],[11.45604,104.78216],[11.4558,104.77967],[11.4571,104.77798],[11.45787,104.77728],[11.45734,104.77504],[11.45893,104.77393],[11.46118,104.77423],[11.46348,104.77578],[11.46452,104.77883],[11.46633,104.77845],[11.46673,104.77639],[11.46467,104.77412],[11.46233,104.77244],[11.46181,104.77027],[11.46299,104.76782],[11.46385,104.76572],[11.46273,104.76362],[11.46082,104.765],[11.45833,104.76494],[11.45714,104.76293],[11.45824,104.75919],[11.45891,104.75688],[11.45651,104.75574],[11.45379,104.75936],[11.45139,104.76025],[11.45046,104.75784],[11.45189,104.75439],[11.45436,104.75381],[11.45645,104.75283],[11.45593,104.75049],[11.45523,104.74867],[11.45453,104.74694],[11.45489,104.74556],[11.45459,104.7443],[11.45695,104.74447],[11.46199,104.74475],[11.46619,104.74469],[11.47087,104.74488],[11.47506,104.74484],[11.47897,104.74627],[11.48375,104.7463],[11.48526,104.74859],[11.48643,104.74973],[11.48915,104.74983],[11.48901,104.75161],[11.48888,104.75687],[11.48955,104.75864],[11.49147,104.75889],[11.49173,104.76269],[11.49387,104.76284],[11.49553,104.76287],[11.4969,104.76368],[11.49935,104.76507],[11.501,104.76672],[11.50211,104.7681],[11.50598,104.76846],[11.51013,104.76861],[11.51452,104.76847],[11.51861,104.76818],[11.51986,104.76606],[11.52238,104.76249],[11.52545,104.75921],[11.52923,104.7568],[11.53074,104.75475],[11.52866,104.75085],[11.52816,104.74721],[11.52912,104.74501],[11.53108,104.74414],[11.53378,104.74379],[11.53524,104.743],[11.53825,104.74365],[11.54294,104.74258],[11.54577,104.73976],[11.54491,104.73722],[11.5438,104.73381],[11.54427,104.73048],[11.54406,104.72791],[11.54835,104.72775],[11.55209,104.72686],[11.55633,104.72541],[11.55937,104.72314],[11.56081,104.72062],[11.56386,104.72215],[11.56662,104.72341],[11.56779,104.72201],[11.57078,104.72145],[11.57211,104.71949],[11.57205,104.71555],[11.57289,104.7132],[11.57545,104.71296],[11.57595,104.71629],[11.57581,104.71924],[11.57459,104.72264],[11.57497,104.72415],[11.5753,104.72614],[11.57448,104.72842],[11.57581,104.7296],[11.57677,104.73049],[11.57843,104.73187],[11.58046,104.73273],[11.5813,104.73389],[11.5819,104.73545],[11.5834,104.73768],[11.58305,104.73909],[11.58459,104.74024],[11.58748,104.74094],[11.58954,104.74214],[11.58963,104.74442],[11.59063,104.74599],[11.59064,104.74845],[11.59128,104.7506],[11.59029,104.75176],[11.59145,104.75324],[11.59186,104.75475],[11.59091,104.75567],[11.59068,104.75701],[11.59082,104.75842],[11.5914,104.7598],[11.59201,104.76115],[11.59199,104.76275],[11.59266,104.76538],[11.59288,104.76811],[11.5934,104.77038],[11.59496,104.77268],[11.597,104.77457],[11.59849,104.77597],[11.59927,104.77829],[11.60267,104.77824],[11.60519,104.77971],[11.60527,104.78166],[11.60735,104.78297],[11.60887,104.78419],[11.61052,104.78499],[11.60976,104.78683],[11.60809,104.78841],[11.60452,104.7887],[11.59919,104.78836],[11.59471,104.78798],[11.59111,104.78779],[11.58685,104.78754],[11.58059,104.78722],[11.57748,104.78628],[11.5738,104.78304],[11.57201,104.7838],[11.57124,104.78716],[11.56815,104.78789],[11.56546,104.78737],[11.56303,104.78434],[11.56146,104.78547],[11.55986,104.78561],[11.55757,104.78385],[11.55397,104.78357],[11.55253,104.7832]],"c":[11.5236,104.77343]},"Mean Chey":{"r":[[11.52686,104.92092],[11.52693,104.92244],[11.52794,104.92486],[11.52905,104.9277],[11.53061,104.93082],[11.52636,104.93488],[11.51721,104.93802],[11.50207,104.94291],[11.49386,104.94677],[11.4845,104.92138],[11.50217,104.91351],[11.50502,104.91378],[11.51118,104.91359],[11.51462,104.91363],[11.51905,104.91242],[11.52011,104.90739],[11.52195,104.90077],[11.52283,104.89736],[11.52179,104.89394],[11.52254,104.88851],[11.52198,104.88374],[11.52189,104.87551],[11.52177,104.87486],[11.52196,104.86873],[11.52319,104.86285],[11.52604,104.8627],[11.53236,104.86217],[11.53763,104.862],[11.54268,104.86145],[11.54514,104.86151],[11.54634,104.86791],[11.54756,104.87724],[11.54807,104.88241],[11.54861,104.88671],[11.54888,104.88839],[11.54974,104.89071],[11.5497,104.89443],[11.54907,104.89616],[11.54865,104.89763],[11.54737,104.89855],[11.54519,104.90005],[11.54431,104.90149],[11.54359,104.90508],[11.54221,104.90782],[11.54,104.90926],[11.5364,104.91119],[11.53361,104.91267],[11.53145,104.91382],[11.52824,104.91579],[11.5267,104.91861],[11.52686,104.92092],[11.52686,104.92092]],"c":[11.521,104.90577]},"Pou Senchey":{"r":[[11.55057,104.78331],[11.55253,104.7832],[11.5566,104.78361],[11.55835,104.78429],[11.56072,104.78584],[11.56232,104.7845],[11.56479,104.78626],[11.56645,104.78771],[11.56981,104.78783],[11.57185,104.78554],[11.57261,104.78238],[11.57558,104.78454],[11.57858,104.7872],[11.58306,104.78742],[11.58931,104.78769],[11.59257,104.78777],[11.59709,104.7882],[11.60057,104.78839],[11.60698,104.78843],[11.60916,104.78799],[11.60717,104.79169],[11.60396,104.79701],[11.59811,104.79887],[11.59128,104.79981],[11.58552,104.80207],[11.58325,104.80479],[11.58081,104.80807],[11.57966,104.81086],[11.57958,104.81735],[11.57935,104.8223],[11.56861,104.82364],[11.56907,104.82623],[11.56837,104.8318],[11.568,104.83478],[11.56632,104.85055],[11.56669,104.85612],[11.56737,104.86072],[11.56765,104.86429],[11.55481,104.86276],[11.54514,104.86151],[11.54268,104.86145],[11.53763,104.862],[11.53236,104.86217],[11.52604,104.8627],[11.52319,104.86285],[11.52196,104.86873],[11.52177,104.87486],[11.52071,104.87656],[11.51795,104.8781],[11.51636,104.87818],[11.5134,104.87555],[11.51052,104.86853],[11.50827,104.86321],[11.50563,104.85716],[11.50624,104.84905],[11.50637,104.84484],[11.50501,104.83865],[11.5027,104.83788],[11.50046,104.83849],[11.49999,104.83775],[11.50034,104.83587],[11.50028,104.83374],[11.50054,104.83078],[11.50041,104.82707],[11.50015,104.82212],[11.50027,104.8195],[11.50139,104.81848],[11.5032,104.81919],[11.50719,104.81963],[11.50998,104.81997],[11.51182,104.82026],[11.51702,104.82101],[11.51858,104.81932],[11.51912,104.81521],[11.51979,104.80985],[11.5205,104.80434],[11.51898,104.79918],[11.51876,104.79623],[11.52433,104.79369],[11.53,104.7963],[11.53093,104.79886],[11.53136,104.80135],[11.53383,104.79932],[11.53762,104.79756],[11.54115,104.79619],[11.54484,104.79573],[11.54873,104.79512],[11.5483,104.7894],[11.54924,104.78381],[11.55057,104.78331]],"c":[11.54484,104.82559]},"Prek Pnov":{"r":[[11.71561,104.84004],[11.71564,104.83638],[11.71574,104.8301],[11.71558,104.82454],[11.7151,104.8224],[11.71307,104.82223],[11.71132,104.82354],[11.70873,104.82414],[11.70883,104.8221],[11.70876,104.81928],[11.7069,104.81766],[11.7038,104.81528],[11.69962,104.81588],[11.69644,104.81513],[11.6931,104.81469],[11.69014,104.81594],[11.6883,104.81696],[11.68382,104.81292],[11.67855,104.80994],[11.67564,104.81122],[11.67395,104.81373],[11.67311,104.80948],[11.67281,104.80299],[11.67182,104.79893],[11.672,104.79541],[11.6723,104.79198],[11.6718,104.78689],[11.67138,104.78096],[11.66945,104.7764],[11.66658,104.76677],[11.66612,104.75711],[11.6656,104.75141],[11.66394,104.74852],[11.65989,104.74733],[11.65795,104.74792],[11.65532,104.74779],[11.65318,104.74618],[11.6466,104.74272],[11.64355,104.74336],[11.63934,104.74388],[11.63412,104.74258],[11.62853,104.74165],[11.62352,104.74055],[11.61941,104.73967],[11.6162,104.73842],[11.61062,104.73596],[11.6068,104.73443],[11.60464,104.7345],[11.6019,104.73569],[11.5993,104.73601],[11.59751,104.73528],[11.59595,104.73429],[11.59346,104.73238],[11.5903,104.73156],[11.58842,104.73207],[11.58645,104.73283],[11.58444,104.73393],[11.58151,104.73468],[11.58306,104.73635],[11.58332,104.73835],[11.58338,104.73994],[11.58637,104.7407],[11.58903,104.74174],[11.58963,104.74322],[11.58977,104.74528],[11.59041,104.74706],[11.59103,104.74972],[11.59065,104.75138],[11.59116,104.75257],[11.59095,104.75419],[11.5916,104.7553],[11.59081,104.75633],[11.59069,104.75761],[11.59084,104.75908],[11.59186,104.76043],[11.59206,104.76218],[11.59238,104.76416],[11.59273,104.76681],[11.59319,104.76929],[11.59394,104.77182],[11.5957,104.77374],[11.59777,104.77532],[11.5985,104.77759],[11.6015,104.77828],[11.60401,104.77898],[11.60545,104.7803],[11.60585,104.7822],[11.60808,104.7835],[11.61,104.78435],[11.61035,104.78611],[11.60916,104.78799],[11.60717,104.79169],[11.60396,104.79701],[11.59811,104.79887],[11.59128,104.79981],[11.58552,104.80207],[11.58325,104.80479],[11.58081,104.80807],[11.57966,104.81086],[11.57958,104.81735],[11.57935,104.8223],[11.58001,104.82425],[11.58208,104.8261],[11.58614,104.83],[11.59091,104.83214],[11.59594,104.83301],[11.60241,104.83241],[11.60945,104.83274],[11.61443,104.83391],[11.61881,104.83592],[11.62054,104.83875],[11.63971,104.84236],[11.64976,104.85613],[11.66117,104.86622],[11.66756,104.86175],[11.67134,104.85907],[11.6737,104.85674],[11.67659,104.85519],[11.68137,104.85224],[11.68656,104.84961],[11.69245,104.84644],[11.69757,104.84491],[11.70496,104.84284],[11.71309,104.84035],[11.71561,104.84004]],"c":[11.64036,104.80017]},"Russey Keo":{"r":[[11.64871,104.85702],[11.65857,104.86843],[11.65548,104.87051],[11.65146,104.87317],[11.64745,104.87662],[11.64276,104.88255],[11.64067,104.88733],[11.63913,104.89192],[11.63748,104.89585],[11.63541,104.90077],[11.63299,104.9053],[11.63007,104.90841],[11.62636,104.91235],[11.62134,104.91652],[11.61557,104.91935],[11.61318,104.91978],[11.60941,104.92055],[11.6073,104.92068],[11.60436,104.92097],[11.59842,104.92098],[11.59604,104.92108],[11.59025,104.92121],[11.58869,104.92041],[11.58857,104.91782],[11.58825,104.91632],[11.58783,104.91441],[11.58506,104.91443],[11.58398,104.90979],[11.58577,104.90071],[11.59039,104.89626],[11.60756,104.88556],[11.6091,104.88567],[11.61263,104.88496],[11.6148,104.88219],[11.61715,104.88108],[11.61974,104.87909],[11.62106,104.87805],[11.62453,104.87729],[11.62369,104.87295],[11.6259,104.87183],[11.62753,104.87159],[11.63123,104.87279],[11.63479,104.87432],[11.6389,104.87276],[11.64245,104.86981],[11.64317,104.86579],[11.64516,104.86268],[11.6485,104.86109],[11.64838,104.85776],[11.64871,104.85702]],"c":[11.61784,104.89574]},"Sen Sok":{"r":[[11.63481,104.83614],[11.64885,104.85464],[11.64871,104.85702],[11.64851,104.86012],[11.64673,104.86193],[11.64347,104.86333],[11.6432,104.86765],[11.64075,104.87161],[11.6366,104.87385],[11.63271,104.87387],[11.62979,104.87183],[11.62664,104.8717],[11.6244,104.87205],[11.62459,104.87496],[11.62286,104.8778],[11.62052,104.87889],[11.61835,104.88022],[11.61549,104.88201],[11.61407,104.88345],[11.61113,104.88556],[11.60812,104.88559],[11.5985,104.8912],[11.58957,104.89502],[11.58676,104.89132],[11.58365,104.88741],[11.56571,104.88856],[11.56295,104.88972],[11.56071,104.88955],[11.55831,104.88749],[11.55523,104.88679],[11.55178,104.88799],[11.55044,104.88942],[11.54908,104.88932],[11.54875,104.88753],[11.54854,104.88616],[11.54781,104.88028],[11.5472,104.87221],[11.5456,104.86405],[11.54582,104.8616],[11.56065,104.86291],[11.56755,104.86264],[11.56714,104.85879],[11.56642,104.85332],[11.56655,104.83478],[11.56828,104.8334],[11.56869,104.82942],[11.56916,104.82493],[11.57945,104.82337],[11.58048,104.8247],[11.58366,104.82754],[11.58867,104.83151],[11.59308,104.83258],[11.5997,104.83248],[11.60568,104.83289],[11.61211,104.83283],[11.61743,104.83504],[11.61949,104.83763],[11.63481,104.83614],[11.63481,104.83614]],"c":[11.59585,104.86045]},"Tuol Kouk":{"r":[[11.58957,104.89502],[11.59093,104.89749],[11.58334,104.90783],[11.58071,104.90598],[11.57792,104.90477],[11.575,104.90442],[11.57251,104.90441],[11.57054,104.90629],[11.56703,104.9068],[11.56055,104.90773],[11.55675,104.90726],[11.55453,104.9049],[11.55207,104.90237],[11.54942,104.89954],[11.54865,104.89763],[11.54907,104.89616],[11.5497,104.89443],[11.54974,104.89071],[11.55099,104.88868],[11.55332,104.8872],[11.55638,104.88676],[11.55954,104.88839],[11.56151,104.89055],[11.56473,104.88902],[11.57067,104.88826],[11.58492,104.8884],[11.5884,104.89322],[11.58957,104.89502]],"c":[11.56864,104.89692]}};
+const PACKS={1:18,2:18,3:18};
+const PLAN={"budget": 1389.96, "packs": 702, "avg": 35.64, "act": [{"n": 11, "l": "Sat 28 Nov"}, {"n": 1, "l": "Sun 29 Nov"}, {"n": 2, "l": "Sat 5 Dec"}]};
+const ORDER={"file": 91.2, "sugg": 74.8, "days": [[0, "2026-11-19", 3.4, 2.7], [0, "2026-11-20", 12.8, 7.0], [0, "2026-11-21", 4.2, 4.1], [1, "2026-11-19", 11.5, 9.7], [1, "2026-11-20", 12.0, 6.1], [1, "2026-11-21", 6.6, 6.2], [2, "2026-11-19", 17.8, 17.1], [2, "2026-11-20", 16.0, 15.0], [2, "2026-11-21", 6.9, 6.9]]};
+</script>
+<script>
+const REPS=["Met Machhearo","Oulvann SreyPich","Hing Sivmey"];
+const RCOL=["#0B7A75","#8E44AD","#D9730D"];
+const STAT=["To visit","Visited – Interested","Visited – Agreed","Visited – Declined","Revisit needed","Not found / closed"];
+const SCOL=["#8A94A0","#1E6FD9","#1E7A3C","#C62828","#E08A00","#4A4458"];
+const PRI=["","High","Medium","Low"];
+const DAYS=[{d:"2026-11-19",l:"Thu 19"},{d:"2026-11-20",l:"Fri 20"},{d:"2026-11-21",l:"Sat 21"},{d:"2026-11-23",l:"Mon 23",revisit:true}];
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmtKm=m=>m<1000?Math.round(m)+" m":(m/1000).toFixed(1)+" km";
+const pad=n=>String(n).padStart(2,"0");
+const now=new Date(); const TODAY=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+const byN=Object.fromEntries(CLINICS.map(c=>[c.n,c]));
+
+/* ---------- saved state (this phone) ---------- */
+function load(k,def){try{const v=localStorage.getItem(k);return v?JSON.parse(v):def;}catch(e){return def;}}
+function save(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+let rep=load("vet-rep",null);            // 0,1,2 or "all"
+let reports=load("vet-reports",{});      // {n:{s,date,packs,disp,res,t,by}}
+let imported=load("vet-imported",{});    // manager: reports pasted from reps
+let orderMode=load("vet-order","sugg");  // "sugg" | "file"
+const firstDay=DAYS.find(x=>x.d>=TODAY);
+let day=(DAYS.find(x=>x.d===TODAY)||firstDay||DAYS[0]).d, tab="list", detail=null, selN=null;
+
+function rep_of(c){return c.rep;}
+function repOf(n){const r=reports[n]||imported[n];return r||null;}
+function statusOf(c){const r=reports[c.n]||imported[c.n];return r?r.s:0;}
+function ordOf(c){return orderMode==="sugg"?c.sord:c.ord;}
+function mine(c){return rep==="all"||c.rep===rep;}
+function isRevisit(c){const s=statusOf(c);return s===4||s===5||(s===0&&c.date<TODAY);}
+function listFor(d){
+  const dd=DAYS.find(x=>x.d===d);
+  let l=CLINICS.filter(mine);
+  if(d==="all") return l.sort((a,b)=>a.date.localeCompare(b.date)||a.rep-b.rep||ordOf(a)-ordOf(b));
+  if(dd&&dd.revisit) return l.filter(isRevisit).sort((a,b)=>a.rep-b.rep||a.pri-b.pri||a.date.localeCompare(b.date)||ordOf(a)-ordOf(b));
+  return l.filter(c=>c.date===d).sort((a,b)=>a.rep-b.rep||ordOf(a)-ordOf(b));
+}
+function seqLabel(c){const dd=DAYS.find(x=>x.d===day);return day==="all"||(dd&&dd.revisit)?String(c.n):String(ordOf(c));}
+
+/* ---------- map ---------- */
+const bases={
+  street:L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:20,maxNativeZoom:19,attribution:"© OpenStreetMap"}),
+  clean:L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{maxZoom:20,maxNativeZoom:19,attribution:"© OpenStreetMap © CARTO"}),
+  sat:L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:20,maxNativeZoom:19,attribution:"Imagery © Esri"})
+};
+const map=L.map("map",{zoomControl:false,zoomSnap:0.25,layers:[bases.street]});
+L.control.scale({metric:true,imperial:false,position:"bottomleft"}).addTo(map);
+const khLayer=L.layerGroup(), otherLayer=L.layerGroup(), pinLayer=L.layerGroup(), routeLayer=L.layerGroup();
+Object.entries(KHANS).forEach(([k,v])=>{
+  L.polyline(v.r,{color:"#4A4458",weight:1.6,opacity:.75,dashArray:"6 4",interactive:false}).addTo(khLayer);
+  L.tooltip({permanent:true,direction:"center",className:"kh-label",interactive:false}).setLatLng(v.c).setContent(esc(k)).addTo(khLayer);
+});
+khLayer.addTo(map); otherLayer.addTo(map); routeLayer.addTo(map); pinLayer.addTo(map);
+map.on("zoomend",()=>document.body.classList.toggle("hide-kh",map.getZoom()<12.75));
+
+function drawMap(){
+  pinLayer.clearLayers(); otherLayer.clearLayers(); routeLayer.clearLayers();
+  const list=listFor(day), ids=new Set(list.map(c=>c.n));
+  CLINICS.forEach(c=>{
+    if(ids.has(c.n))return;
+    if($("#l-other").checked) L.circleMarker([c.lat,c.lng],{radius:5,color:"#fff",weight:1.5,fillColor:"#8A94A0",fillOpacity:.85})
+      .bindTooltip(`#${c.n} ${esc(c.name)} · ${esc(REPS[c.rep])}`).on("click",()=>openClinic(c.n)).addTo(otherLayer);
+  });
+  list.forEach(c=>{
+    const s=statusOf(c), cls=["om"]; if(c.pri===1)cls.push("hi"); if(c.n===selN)cls.push("sel");
+    const size=32;
+    L.marker([c.lat,c.lng],{icon:L.divIcon({className:"",html:`<div class="${cls.join(" ")}" style="width:${size}px;height:${size}px;background:${SCOL[s]}">${seqLabel(c)}</div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]}),
+      zIndexOffset:c.n===selN?3000:1000-ordOf(c),title:c.name,keyboard:false}).on("click",()=>openClinic(c.n)).addTo(pinLayer);
+  });
+  const dd=DAYS.find(x=>x.d===day);
+  if($("#l-route").checked&&day!=="all"&&!(dd&&dd.revisit)){
+    for(let r=0;r<3;r++){const pts=list.filter(c=>c.rep===r).map(c=>[c.lat,c.lng]);
+      if(pts.length>1)L.polyline(pts,{color:RCOL[r],weight:4,opacity:.8,dashArray:"8 6",interactive:false}).addTo(routeLayer);}
+  }
+}
+function fitDay(){
+  const pts=listFor(day).map(c=>[c.lat,c.lng]);
+  const b=pts.length?L.latLngBounds(pts):L.latLngBounds(CLINICS.map(c=>[c.lat,c.lng]));
+  map.fitBounds(b,{paddingTopLeft:[24,130],paddingBottomRight:[70,140],maxZoom:16});
+}
+
+/* ---------- top bar, chips, picker ---------- */
+function renderTop(){$("#repBtn").textContent=rep==="all"?"Manager · all reps":REPS[rep]??"Choose rep";}
+function renderChips(){
+  const c=$("#chips");
+  const cnt=d=>listFor(d).length;
+  c.innerHTML=DAYS.map(x=>{const n=cnt(x.d);return `<button class="chip" data-day="${x.d}" aria-pressed="${day===x.d}">${x.l}${x.revisit?" · revisit":""} <small>${n}</small>${x.d===TODAY?'<span class="today">TODAY</span>':""}</button>`;}).join("")+
+    `<button class="chip" data-day="all" aria-pressed="${day==="all"}">All <small>${cnt("all")}</small></button>`;
+  c.querySelectorAll(".chip").forEach(b=>b.onclick=()=>setDay(b.dataset.day));
+  const on=c.querySelector('[aria-pressed="true"]'); if(on)on.scrollIntoView({inline:"center",block:"nearest"});
+}
+function setDay(d){day=d;detail=null;selN=null;renderChips();drawMap();fitDay();goTab("list");}
+function openPicker(){
+  const counts=[0,1,2].map(r=>CLINICS.filter(c=>c.rep===r).length);
+  $("#pk-list").innerHTML=REPS.map((n,i)=>`<button data-rep="${i}"><i style="background:${RCOL[i]}"></i>${esc(n)}<small>${counts[i]} clinics</small></button>`).join("")+
+    `<button data-rep="all"><i style="background:var(--ink)"></i>Manager · all reps<small>${CLINICS.length} clinics</small></button>`;
+  $("#picker").hidden=false;
+  $("#pk-list").querySelectorAll("button").forEach(b=>b.onclick=()=>{rep=b.dataset.rep==="all"?"all":+b.dataset.rep;save("vet-rep",rep);$("#picker").hidden=true;renderTop();setDay(day);});
+}
+$("#repBtn").onclick=openPicker;
+
+/* ---------- sheet ---------- */
+const sheet=$("#sheet");
+function setSheet(s){sheet.classList.remove("half","full");if(s)sheet.classList.add(s);}
+function lvl(){return sheet.classList.contains("full")?2:sheet.classList.contains("half")?1:0;}
+(function(){let y0=null,mv=false;[$("#grab"),$("#tabs")].forEach(z=>{
+  z.addEventListener("touchstart",e=>{y0=e.touches[0].clientY;mv=false;},{passive:true});
+  z.addEventListener("touchmove",e=>{if(y0!==null&&Math.abs(e.touches[0].clientY-y0)>12)mv=true;},{passive:true});
+  z.addEventListener("touchend",e=>{if(y0===null)return;const dy=e.changedTouches[0].clientY-y0;y0=null;if(!mv)return;setSheet(["","half","full"][dy<0?Math.min(2,lvl()+1):Math.max(0,lvl()-1)]);});});
+  $("#grab").addEventListener("click",()=>setSheet(["half","full",""][lvl()]));})();
+function goTab(t){tab=t;detail=null;document.querySelectorAll("#tabs button").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));render();}
+document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>{goTab(b.dataset.tab);if(!lvl())setSheet("half");});
+function toast(m){const t=$("#toast");t.textContent=m;t.hidden=false;clearTimeout(t._h);t._h=setTimeout(()=>t.hidden=true,1800);}
+
+function row(c){
+  const s=statusOf(c), dd=DAYS.find(x=>x.d===day);
+  const sub=[rep==="all"?REPS[c.rep].split(" ")[0]:null,(day==="all"||(dd&&dd.revisit))?DAYS.find(x=>x.d===c.date).l:null,c.tel?c.phone:"No phone · walk in"].filter(Boolean).join(" · ");
+  return `<button class="row" data-c="${c.n}"><span class="num" style="background:${SCOL[s]}">${seqLabel(c)}</span>
+    <span class="info"><div class="t">${esc(c.name)}</div><div class="m"><span class="pr pr${c.pri}">${PRI[c.pri]}</span>${esc(sub)}</div></span>
+    <span class="st" style="background:${SCOL[s]}">${esc(STAT[s].replace("Visited – ",""))}</span></button>`;
+}
+function render(){
+  const b=$("#body");
+  if(detail){b.innerHTML=detail();b.scrollTop=0;bindDetail();return;}
+  if(tab==="list"){
+    const l=listFor(day), dd=DAYS.find(x=>x.d===day), done=l.filter(c=>statusOf(c)>0).length;
+    const orderCtl=day!=="all"&&!(dd&&dd.revisit)?`<div class="seg" role="group" aria-label="Visit order"><button data-o="sugg" aria-pressed="${orderMode==="sugg"}">Shortest order</button><button data-o="file" aria-pressed="${orderMode==="file"}">Plan order</button></div>`:"";
+    let km=0; if(orderCtl){for(let r=0;r<3;r++){const p=l.filter(c=>c.rep===r);for(let i=1;i<p.length;i++)km+=map.distance([p[i-1].lat,p[i-1].lng],[p[i].lat,p[i].lng]);}}
+    const head=`<div class="bar2">${orderCtl}<span class="muted mono">${done}/${l.length} reported${orderCtl?" · "+fmtKm(km)+" between clinics":""}</span></div>`;
+    const intro=dd&&dd.revisit?`<div class="note tip">Clinics marked <b>Revisit needed</b> or <b>Not found / closed</b>, plus any planned clinic not yet reported after its day. Sorted by priority.</div>`:"";
+    b.innerHTML=head+intro+(l.length?l.map(row).join(""):`<div class="empty">${dd&&dd.revisit?"Nothing to revisit yet.":"No clinics for this day."}</div>`)+
+      (orderCtl?`<div class="note">“Shortest order” keeps the same clinics for the day and only changes the order to cut travel. “Plan order” is the order in the Excel plan.</div>`:"");
+    b.querySelectorAll("[data-o]").forEach(x=>x.onclick=()=>{orderMode=x.dataset.o;save("vet-order",orderMode);drawMap();render();});
+  }else if(tab==="report") renderReport(b);
+  else renderPlan(b);
+  b.querySelectorAll("[data-c]").forEach(x=>x.onclick=()=>openClinic(+x.dataset.c));
+}
+
+/* ---------- clinic detail + visit form ---------- */
+function openClinic(n){
+  const c=byN[n]; if(!c)return;
+  const dd=DAYS.find(x=>x.d===day);
+  if(day!=="all"&&!(dd&&dd.revisit)&&c.date!==day&&mine(c)){day=c.date;renderChips();}
+  selN=n; drawMap(); if(lvl()!==2)setSheet("half");
+  map.flyTo([c.lat,c.lng],Math.max(map.getZoom(),16),{duration:.6});
+  setTimeout(()=>map.panBy([0,innerHeight*0.26-60],{animate:true}),650);
+  const seq=listFor(day), k=seq.findIndex(x=>x.n===n), prev=seq[k-1], next=seq[k+1];
+  const r=reports[n]||imported[n]||{s:0,date:TODAY,packs:PACKS[c.pri],disp:"",res:""};
+  const f={s:r.s,date:r.date||TODAY,packs:r.packs??PACKS[c.pri],disp:r.disp||"",res:r.res||""};
+  const dirUrl=`https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}${c.pid?"&destination_place_id="+c.pid:""}`;
+  const gm=c.pid?`https://www.google.com/maps/place/?q=place_id:${c.pid}`:`https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}`;
+  detail=()=>`<div class="detail">
+    <div class="dnav"><button class="back">‹ List</button><span class="sp"></span>
+      ${k>=0?`<button class="nb" ${prev?`data-nav="${prev.n}"`:"disabled"} aria-label="Previous clinic">‹</button><span class="mono muted">${k+1} / ${seq.length}</span><button class="nb" ${next?`data-nav="${next.n}"`:"disabled"} aria-label="Next clinic">›</button>`:""}</div>
+    <div><span class="pr pr${c.pri}">${PRI[c.pri]} priority</span><span class="muted">#${c.n} · ${esc(REPS[c.rep])} · ${DAYS.find(x=>x.d===c.date).l}</span></div>
+    <h2>${esc(c.name)}</h2>
+    <div class="muted">★ ${c.rating} · ${c.reviews} Google reviews</div>
+    ${c.note?`<div class="note tip" style="margin:10px 0">${esc(c.note)}</div>`:""}
+    <dl class="kv">
+      <dt>Phone</dt><dd>${c.tel?`<span class="mono" style="user-select:all">${esc(c.phone)}</span>`:"No phone on Google · walk in"}</dd>
+      <dt>Address</dt><dd>${esc(c.addr)}</dd>
+      <dt>Hours</dt><dd>${esc(c.hours)}</dd>
+      <dt>Zone</dt><dd>${esc(c.zone)}</dd>
+      ${next?`<dt>Next</dt><dd>${esc(next.name)} · ${fmtKm(map.distance([c.lat,c.lng],[next.lat,next.lng]))}</dd>`:""}
+    </dl>
+    <div class="actions">
+      <a class="btn primary" href="${dirUrl}" target="_blank" rel="noopener">Directions</a>
+      ${c.tel?`<a class="btn ghost" href="tel:${c.tel}">Call</a>`:`<a class="btn ghost" href="${gm}" target="_blank" rel="noopener">Google Maps</a>`}
+    </div>
+    <form class="form" id="vf" autocomplete="off">
+      <h3>Visit result</h3>
+      <div class="opts" role="group" aria-label="Status">${STAT.map((s,i)=>`<button type="button" class="opt" data-s="${i}" aria-pressed="${f.s===i}"><i style="background:${SCOL[i]}"></i>${esc(s)}</button>`).join("")}</div>
+      <div class="inl">
+        <div class="fld"><label for="f-packs">Packs given</label>
+          <div class="stepper"><button type="button" data-step="-1" aria-label="One pack less">−</button><input id="f-packs" inputmode="numeric" value="${esc(f.packs)}"><button type="button" data-step="1" aria-label="One pack more">+</button></div></div>
+        <div class="fld" style="flex:none"><label>Display placed</label>
+          <div class="yn" role="group" aria-label="Display placed"><button type="button" data-d="Yes" aria-pressed="${f.disp==="Yes"}">Yes</button><button type="button" data-d="No" aria-pressed="${f.disp==="No"}">No</button></div></div>
+      </div>
+      <div class="fld"><label for="f-date">Actual visit date</label><input id="f-date" type="date" value="${esc(f.date)}"></div>
+      <div class="fld"><label for="f-res">Result / next step</label><textarea id="f-res" placeholder="Who you met, interest, order, follow-up date…">${esc(f.res)}</textarea></div>
+      <button type="submit" class="btn primary wide" style="width:100%;margin-top:12px">Save visit</button>
+      <div class="saved" id="savedMsg">${reports[n]?"Saved on this phone · "+esc(new Date(reports[n].t).toLocaleString()):imported[n]?"From a pasted team report":""}</div>
+    </form>
+    ${next?`<button class="btn ghost" style="width:100%" data-nav="${next.n}">Next clinic: ${esc(next.name)} ›</button>`:""}
+  </div>`;
+  render();
+  // form state
+  const vf=$("#vf"); let st=f.s, disp=f.disp;
+  vf.querySelectorAll("[data-s]").forEach(x=>x.onclick=()=>{st=+x.dataset.s;vf.querySelectorAll("[data-s]").forEach(y=>y.setAttribute("aria-pressed",String(y===x)));});
+  vf.querySelectorAll("[data-d]").forEach(x=>x.onclick=()=>{disp=x.dataset.d;vf.querySelectorAll("[data-d]").forEach(y=>y.setAttribute("aria-pressed",String(y===x)));});
+  vf.querySelectorAll("[data-step]").forEach(x=>x.onclick=()=>{const i=$("#f-packs");i.value=Math.max(0,(parseInt(i.value)||0)+ +x.dataset.step);});
+  vf.onsubmit=e=>{e.preventDefault();
+    if(st===0&&!$("#f-res").value.trim()){toast("Choose a visit result first");return;}
+    const packs=st===0||st===5?0:Math.max(0,parseInt($("#f-packs").value)||0);
+    reports[n]={s:st,date:$("#f-date").value||TODAY,packs,disp:st===5?"No":(disp||"No"),res:$("#f-res").value.trim(),t:Date.now(),by:rep==="all"?"Manager":REPS[rep]};
+    save("vet-reports",reports); drawMap(); renderChips(); toast("Saved");
+    $("#savedMsg").textContent="Saved on this phone · "+new Date().toLocaleTimeString();
+  };
+}
+function bindDetail(){
+  const b=$("#body");
+  const bk=b.querySelector(".back"); if(bk)bk.onclick=()=>{detail=null;selN=null;drawMap();render();};
+  b.querySelectorAll("[data-nav]").forEach(x=>x.onclick=()=>openClinic(+x.dataset.nav));
+}
+
+/* ---------- report ---------- */
+function reportLine(c,r){return `#${c.n} | ${c.name} | ${STAT[r.s]} | ${r.date} | ${r.packs} | ${r.disp||"No"} | ${(r.res||"").replace(/\s*\n\s*/g," ")}`;}
+function myReportText(){
+  const mineL=CLINICS.filter(mine).filter(c=>reports[c.n]).sort((a,b)=>a.n-b.n);
+  const who=rep==="all"?"Manager":REPS[rep];
+  const packs=mineL.reduce((a,c)=>a+(reports[c.n].packs||0),0), disp=mineL.filter(c=>reports[c.n].disp==="Yes").length;
+  return `JOMNEY vet visits – ${who} – ${new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short"})}\n`+
+    `${mineL.length} clinics reported · ${packs} packs · ${disp} displays\n`+
+    `# | Clinic | Status | Date | Packs | Display | Result\n`+mineL.map(c=>reportLine(c,reports[c.n])).join("\n");
+}
+function parseReports(txt){
+  let n=0;
+  txt.split(/\r?\n/).forEach(line=>{
+    const m=line.match(/^\s*#(\d+)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(\d{4}-\d{2}-\d{2})\s*\|\s*(\d+)\s*\|\s*(Yes|No)\s*\|\s*(.*)$/);
+    if(!m)return; const s=STAT.indexOf(m[3]); if(s<0||!byN[+m[1]])return;
+    imported[+m[1]]={s,date:m[4],packs:+m[5],disp:m[6],res:m[7],t:Date.now(),by:"import"}; n++;
+  });
+  save("vet-imported",imported); return n;
+}
+function excelRows(){
+  return CLINICS.slice().sort((a,b)=>a.n-b.n).map(c=>{const r=reports[c.n]||imported[c.n];
+    return r?[STAT[r.s],r.date,r.packs,r.disp||"No",(r.res||"").replace(/\t|\n/g," ")].join("\t"):["To visit","","","",""].join("\t");}).join("\n");
+}
+async function copyText(t,okMsg){
+  try{await navigator.clipboard.writeText(t);toast(okMsg);return true;}catch(e){
+    const ta=$("#outBox"); if(ta){ta.value=t;ta.hidden=false;ta.focus();ta.select();} toast("Select all and copy the text below");return false;}
+}
+function renderReport(b){
+  const l=CLINICS.filter(mine), cnt=STAT.map((_,i)=>l.filter(c=>statusOf(c)===i).length);
+  const packs=l.reduce((a,c)=>{const r=reports[c.n]||imported[c.n];return a+(r?r.packs||0:0);},0);
+  const plannedPacks=l.reduce((a,c)=>a+PACKS[c.pri],0), disp=l.filter(c=>{const r=reports[c.n]||imported[c.n];return r&&r.disp==="Yes";}).length;
+  const visited=cnt[1]+cnt[2]+cnt[3];
+  b.innerHTML=`<div class="sec">${rep==="all"?"Team progress":"My progress"} · ${l.length} clinics</div>
+    <div class="pbar">${STAT.map((s,i)=>i?`<i style="width:${100*cnt[i]/l.length}%;background:${SCOL[i]}"></i>`:"").join("")}</div>
+    <div class="kpis"><div class="kpi"><b>${visited}</b><span>visited of ${l.length}</span></div><div class="kpi"><b>${packs}</b><span>packs of ${plannedPacks}</span></div><div class="kpi"><b>${disp}</b><span>displays placed</span></div></div>
+    <div style="padding:0 8px"><table class="sum"><tbody>${STAT.map((s,i)=>`<tr><td><span class="dot" style="background:${SCOL[i]}"></span>${esc(s)}</td><td>${cnt[i]}</td></tr>`).join("")}</tbody></table></div>
+    <div class="sec">Send my report</div>
+    <div class="btns">
+      <a class="btn tg" id="tgBtn" href="https://t.me/share/url?url=%20&amp;text=${encodeURIComponent(myReportText())}" target="_blank" rel="noopener">Send on Telegram</a>
+      <button class="btn ghost" id="cpBtn">Copy report text</button>
+    </div>
+    <div class="note">Reports are saved on this phone only. Send them to your manager at the end of each day.</div>
+    ${rep==="all"?`<div class="sec">Manager · combine team reports</div>
+      <div class="note">Paste the report messages from the reps here (all three at once is fine), then copy the result into Excel.</div>
+      <textarea class="out" id="pasteBox" placeholder="Paste report messages here"></textarea>
+      <div class="btns"><button class="btn primary" id="impBtn">Add pasted reports</button>
+      <button class="btn ghost" id="xlBtn">Copy for Excel (Visit Plan J5:N43)</button>
+      ${Object.keys(imported).length?`<button class="btn ghost" id="clrImp">Clear pasted reports (${Object.keys(imported).length})</button>`:""}</div>
+      <div class="note">In Excel, click cell <b>J5</b> on the Visit Plan sheet and paste. It fills Status, Actual visit date, Packs given, Display placed and Result for all 39 clinics in # order.</div>`:""}
+    <textarea class="out" id="outBox" hidden readonly></textarea>`;
+  $("#cpBtn").onclick=()=>copyText(myReportText(),"Report copied");
+  if(rep==="all"){
+    $("#impBtn").onclick=()=>{const n=parseReports($("#pasteBox").value);toast(n?`Added ${n} clinic reports`:"No report lines found");if(n){drawMap();renderChips();render();}};
+    $("#xlBtn").onclick=()=>copyText(excelRows(),"Copied 39 rows for Excel");
+    const ci=$("#clrImp"); if(ci)ci.onclick=()=>{imported={};save("vet-imported",imported);drawMap();renderChips();render();};
+  }
+}
+
+/* ---------- plan ---------- */
+function renderPlan(b){
+  const reps=[0,1,2].map(r=>DAYS.slice(0,3).map(d=>CLINICS.filter(c=>c.rep===r&&c.date===d.d).length));
+  b.innerHTML=`<div class="sec">Plan at a glance</div>
+    <div class="kpis"><div class="kpi"><b>39</b><span>clinics, never sold before</span></div><div class="kpi"><b>$${PLAN.budget.toLocaleString("en-US",{minimumFractionDigits:2})}</b><span>budget (estimate)</span></div><div class="kpi"><b>${PLAN.packs}</b><span>sample packs</span></div></div>
+    <div class="note">Priority: <b>11 High / 9 Medium / 19 Low</b>. ${PACKS[1]} sample packs per clinic, about $${PLAN.avg.toFixed(2)} per clinic. Saturday is a half day. Closed or missed clinics move to <b>Mon 23 Nov</b>.</div>
+    <div class="sec">Visits per day</div>
+    <div style="padding:0 8px;overflow-x:auto"><table class="sum"><thead><tr><th>Rep</th>${DAYS.slice(0,3).map(d=>`<th>${d.l}</th>`).join("")}<th>Total</th></tr></thead><tbody>
+      ${REPS.map((n,i)=>`<tr><td><span class="dot" style="background:${RCOL[i]}"></span>${esc(n)}</td>${reps[i].map(v=>`<td>${v}</td>`).join("")}<td><b>${reps[i].reduce((a,b)=>a+b,0)}</b></td></tr>`).join("")}
+    </tbody></table></div>
+    <div class="note">Zones: <b>Met Machhearo</b> Central · <b>Oulvann SreyPich</b> North + West · <b>Hing Sivmey</b> South, South-West + East.</div>
+    <div class="sec">Shortest order saves</div>
+    <div style="padding:0 8px;overflow-x:auto"><table class="sum"><thead><tr><th>Rep · day</th><th>Plan</th><th>Shortest</th></tr></thead><tbody>
+      ${ORDER.days.map(([r,d,a,s])=>`<tr><td>${esc(REPS[r].split(" ")[0])} · ${DAYS.find(x=>x.d===d).l}</td><td>${a} km</td><td><b>${s} km</b></td></tr>`).join("")}
+      <tr><td><b>Total</b></td><td><b>${ORDER.file} km</b></td><td><b>${ORDER.sugg} km</b></td></tr></tbody></table></div>
+    <div class="note">Straight-line distance between clinics, not counting the trip from home. Road distance is longer.</div>
+    <div class="sec">Timeline</div>
+    <div style="padding:0 8px"><table class="sum"><tbody>
+      <tr><td>Wed 18 Nov</td><td style="text-align:left">Confirm plan and budget, call clinics to book, prepare packs, displays, leaflets</td></tr>
+      <tr><td>Thu 19 – Sat 21</td><td style="text-align:left">Visits: pitch, give sample packs, place display, update status after each visit</td></tr>
+      <tr><td>Mon 23 Nov</td><td style="text-align:left">Revisit closed or missed clinics, send results to manager</td></tr>
+    </tbody></table></div>
+    <div class="sec">Activation days (proposed)</div>
+    ${PLAN.act.map(a=>`<button class="row" data-c="${a.n}"><span class="num" style="background:var(--accent);font-size:12px">${a.l.split(" ")[1]}</span><span class="info"><div class="t">${esc(byN[a.n].name)}</div><div class="m">${esc(a.l)} · ★ ${byN[a.n].rating} · ${byN[a.n].reviews} reviews</div></span></button>`).join("")}
+    <div class="note">Only where the clinic agrees at the first visit.</div>`;
+}
+
+/* ---------- layers + locate ---------- */
+const lp=$("#layersPanel");
+$("#btnLayers").onclick=()=>{lp.hidden=!lp.hidden;$("#btnLayers").setAttribute("aria-expanded",String(!lp.hidden));};
+map.on("click",()=>{lp.hidden=true;});
+document.querySelectorAll('input[name="base"]').forEach(i=>i.onchange=()=>{Object.values(bases).forEach(b=>map.removeLayer(b));bases[i.value].addTo(map);});
+$("#l-other").onchange=drawMap; $("#l-route").onchange=drawMap;
+$("#l-kh").onchange=e=>e.target.checked?khLayer.addTo(map):khLayer.remove();
+$("#btnFit").onclick=()=>{setSheet("");fitDay();};
+let me=null,meC=null; const here=$("#here");
+function showHere(h){here.innerHTML=`<button class="x" aria-label="Close">×</button>${h}`;here.hidden=false;here.querySelector(".x").onclick=()=>here.hidden=true;
+  here.querySelectorAll("[data-near]").forEach(b=>b.onclick=()=>{here.hidden=true;openClinic(+b.dataset.near);});}
+$("#btnLocate").onclick=()=>{
+  if(!navigator.geolocation){showHere("Location is not available on this device.");return;}
+  showHere("Finding your location…");
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const ll=[pos.coords.latitude,pos.coords.longitude];
+    if(me){map.removeLayer(me);map.removeLayer(meC);}
+    meC=L.circle(ll,{radius:pos.coords.accuracy,color:"#1A73E8",weight:1,fillOpacity:.1,interactive:false}).addTo(map);
+    me=L.marker(ll,{icon:L.divIcon({className:"",html:'<div class="me"></div>',iconSize:[18,18],iconAnchor:[9,9]}),zIndexOffset:4000}).addTo(map);
+    setSheet(""); map.flyTo(ll,15,{duration:.6});
+    const pool=CLINICS.filter(mine).filter(c=>statusOf(c)===0||statusOf(c)===4);
+    const near=pool.map(c=>({c,d:map.distance(ll,[c.lat,c.lng])})).sort((a,b)=>a.d-b.d).slice(0,3);
+    showHere(near.length?`<b>Nearest clinics still to visit</b><br>`+near.map(x=>`<button class="lnk" data-near="${x.c.n}">#${x.c.n} ${esc(x.c.name)}</button> <span class="mono muted">${fmtKm(x.d)}</span>`).join("<br>"):"All your clinics are reported.");
+  },err=>showHere(err.code===1?"Location permission was refused. Allow location for this page in the browser settings, then tap again.":"Could not get your location. Check that GPS is on and try again."),
+  {enableHighAccuracy:true,timeout:15000,maximumAge:30000});
+};
+
+/* ---------- start ---------- */
+renderTop(); renderChips(); drawMap(); fitDay(); render();
+if(rep===null) openPicker();
+</script>
+</body>
+</html>
